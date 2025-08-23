@@ -2,8 +2,8 @@ apiVersion: v2
 name: kubevirt-redfish
 description: A Helm chart that provides a Redfish API server for KubeVirt VMs
 type: application
-version: 0.2.1-73abb30
-appVersion: "v0.2.1"
+version: 0.2.2-system-id-convention
+appVersion: "v0.2.1-67-gfee285c"
 keywords:
   - kubevirt
   - redfish

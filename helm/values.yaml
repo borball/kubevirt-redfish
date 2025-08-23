@@ -17,8 +17,8 @@ global:
   
   # The container image used for kubevirt-redfish (typically leave this as is, using the default image)
   image:
-    repository: "quay.io/your-org/kubevirt-redfish"
-    tag: "v0.2.0"
+    repository: "quay.io/bjozsa-redhat/kubevirt-redfish"
+    tag: "latest"
     pullPolicy: "Always"
 
 # =============================================================================
@@ -203,6 +203,11 @@ server:
   
   # Server port
   port: 8443
+  
+  # System ID convention for Redfish compliance
+  # Options: "legacy" (vm-name only) or "enhanced" (namespace.vm-name)
+  # Default: "legacy" for backward compatibility with existing Metal3/Ironic deployments
+  system_id_convention: "legacy"
   
   # TLS configuration
   tls:

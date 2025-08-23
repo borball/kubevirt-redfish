@@ -633,8 +633,10 @@ func (s *Server) handleChassis(w http.ResponseWriter, r *http.Request) {
 	// Build computer system links
 	var computerSystems []redfish.Link
 	for _, vmName := range vms {
+		// Generate the correct System ID based on configuration
+		systemID := config.GenerateSystemID(s.config.SystemIDConvention, chassisConfig.Namespace, vmName)
 		computerSystems = append(computerSystems, redfish.Link{
-			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s", vmName),
+			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s", systemID),
 		})
 	}
 
@@ -685,20 +687,22 @@ func (s *Server) handleSystemsCollection(w http.ResponseWriter, r *http.Request)
 	var members []redfish.Link
 
 	for _, chassisName := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassisName)
+		chassisConfig, err := s.config.GetChassisByName(chassisName)
 		if err != nil {
 			continue
 		}
 
-		vms, err := s.kubevirtClient.ListVMsWithSelector(config.Namespace, config.VMSelector)
+		vms, err := s.kubevirtClient.ListVMsWithSelector(chassisConfig.Namespace, chassisConfig.VMSelector)
 		if err != nil {
 			logger.Error("Failed to list VMs for chassis %s: %v", chassisName, err)
 			continue
 		}
 
 		for _, vmName := range vms {
+			// Generate the correct System ID based on configuration
+			systemID := config.GenerateSystemID(s.config.SystemIDConvention, chassisConfig.Namespace, vmName)
 			members = append(members, redfish.Link{
-				OdataID: fmt.Sprintf("/redfish/v1/Systems/%s", vmName),
+				OdataID: fmt.Sprintf("/redfish/v1/Systems/%s", systemID),
 			})
 		}
 	}
@@ -764,54 +768,85 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Find the VM across all accessible chassis
-	var vmFound bool
-	var chassisName string
+	// Parse the System ID to extract namespace and VM name
+	var vmName, namespace string
 	var chassisConfig *config.ChassisConfig
 
-	user := auth.GetUser(r)
-	if user == nil {
-		s.sendForbidden(w, "Authentication required")
-		return
-	}
+	// Check if this is an enhanced System ID (contains a dot)
+	if strings.Contains(systemName, ".") {
+		// Enhanced System ID format: namespace.vmname
+		parts := strings.SplitN(systemName, ".", 2)
+		if len(parts) != 2 {
+			s.sendNotFound(w, "Invalid enhanced System ID format")
+			return
+		}
+		namespace = parts[0]
+		vmName = parts[1]
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+		// Find the chassis configuration for this namespace
+		var found bool
+		for _, chassis := range s.config.Chassis {
+			if chassis.Namespace == namespace {
+				chassisConfig = &chassis
+				found = true
+				break
+			}
 		}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+		if !found {
+			s.sendNotFound(w, "Chassis not found for namespace")
+			return
 		}
-	}
+	} else {
+		// Legacy System ID format: just vmname
+		vmName = systemName
 
-	if !vmFound {
-		s.sendNotFound(w, "System not found")
-		return
+		// Find the VM across all accessible chassis
+		user := auth.GetUser(r)
+		if user == nil {
+			s.sendForbidden(w, "Authentication required")
+			return
+		}
+
+		var vmFound bool
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisConfig = config
+				namespace = config.Namespace
+				break
+			}
+		}
+
+		if !vmFound {
+			s.sendNotFound(w, "System not found")
+			return
+		}
 	}
 
 	// Check if user has access to this chassis
-	if !auth.HasChassisAccess(r, chassisName) {
+	if !auth.HasChassisAccess(r, chassisConfig.Name) {
 		s.sendForbidden(w, "Access denied to system")
 		return
 	}
 
 	// Get real power state
-	powerState, err := s.kubevirtClient.GetVMPowerState(chassisConfig.Namespace, systemName)
+	powerState, err := s.kubevirtClient.GetVMPowerState(namespace, vmName)
 	if err != nil {
-		logger.Error("Failed to get power state for VM %s: %v", systemName, err)
+		logger.Error("Failed to get power state for VM %s: %v", vmName, err)
 		powerState = "Unknown"
 	}
 
 	// Get real boot options
-	bootOptions, err := s.kubevirtClient.GetVMBootOptions(chassisConfig.Namespace, systemName)
+	bootOptions, err := s.kubevirtClient.GetVMBootOptions(namespace, vmName)
 	if err != nil {
-		logger.Error("Failed to get boot options for VM %s: %v", systemName, err)
+		logger.Error("Failed to get boot options for VM %s: %v", vmName, err)
 		bootOptions = map[string]interface{}{
 			"bootSourceOverrideEnabled": "Disabled",
 			"bootSourceOverrideTarget":  "None",
@@ -820,30 +855,30 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Get real memory information
-	memoryGB, err := s.kubevirtClient.GetVMMemory(chassisConfig.Namespace, systemName)
+	memoryGB, err := s.kubevirtClient.GetVMMemory(namespace, vmName)
 	if err != nil {
-		logger.Warning("Failed to get memory for VM %s: %v", systemName, err)
+		logger.Warning("Failed to get memory for VM %s: %v", vmName, err)
 		memoryGB = 2.0 // Low default fallback
-	} else {
-		logger.Debug("Retrieved memory for VM %s: %.1f GB", systemName, memoryGB)
 	}
 
 	// Get real CPU information
-	cpuCount, err := s.kubevirtClient.GetVMCPU(chassisConfig.Namespace, systemName)
+	cpuCount, err := s.kubevirtClient.GetVMCPU(namespace, vmName)
 	if err != nil {
-		logger.Warning("Failed to get CPU for VM %s: %v", systemName, err)
+		logger.Warning("Failed to get CPU for VM %s: %v", vmName, err)
 		cpuCount = 1 // Low default fallback
-	} else {
-		logger.Debug("Retrieved CPU count for VM %s: %d cores", systemName, cpuCount)
 	}
 
+	// Generate the correct System ID for the response
+	responseSystemID := config.GenerateSystemID(s.config.SystemIDConvention, namespace, vmName)
+
+	// Return the ComputerSystem resource
 	system := redfish.ComputerSystem{
 		OdataContext: "/redfish/v1/$metadata#ComputerSystem.ComputerSystem",
-		OdataID:      fmt.Sprintf("/redfish/v1/Systems/%s", systemName),
+		OdataID:      fmt.Sprintf("/redfish/v1/Systems/%s", responseSystemID),
 		OdataType:    "#ComputerSystem.v1_0_0.ComputerSystem",
 		OdataEtag:    fmt.Sprintf("W/\"%d\"", time.Now().Unix()), // Simple ETag for versioning
-		ID:           systemName,
-		Name:         systemName,
+		ID:           responseSystemID,
+		Name:         vmName, // Name remains vmName
 		SystemType:   "Virtual",
 		Status: redfish.Status{
 			State:  "Enabled",
@@ -851,20 +886,20 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		},
 		PowerState: powerState,
 		Memory: redfish.MemorySummary{
-			OdataID:              fmt.Sprintf("/redfish/v1/Systems/%s/Memory", systemName),
+			OdataID:              fmt.Sprintf("/redfish/v1/Systems/%s/Memory", responseSystemID),
 			TotalSystemMemoryGiB: memoryGB,
 		},
 		ProcessorSummary: redfish.ProcessorSummary{
 			Count: cpuCount,
 		},
 		Storage: redfish.Link{
-			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s/Storage", systemName),
+			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s/Storage", responseSystemID),
 		},
 		EthernetInterfaces: redfish.Link{
-			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s/EthernetInterfaces", systemName),
+			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s/EthernetInterfaces", responseSystemID),
 		},
 		VirtualMedia: redfish.Link{
-			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s/VirtualMedia", systemName),
+			OdataID: fmt.Sprintf("/redfish/v1/Systems/%s/VirtualMedia", responseSystemID),
 		},
 		Boot: redfish.Boot{
 			BootSourceOverrideEnabled:               bootOptions["bootSourceOverrideEnabled"].(string),
@@ -875,7 +910,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		},
 		Actions: redfish.Actions{
 			Reset: redfish.ResetAction{
-				Target: fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", systemName),
+				Target: fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", responseSystemID),
 				ResetType: []string{
 					"On", "ForceOff", "GracefulShutdown", "ForceRestart", "GracefulRestart", "Pause", "Resume",
 				},
@@ -884,7 +919,7 @@ func (s *Server) handleSystem(w http.ResponseWriter, r *http.Request) {
 		Links: redfish.SystemLinks{
 			ManagedBy: []redfish.Link{
 				{
-					OdataID: "/redfish/v1/Managers/1",
+					OdataID: fmt.Sprintf("/redfish/v1/Managers/%s", chassisConfig.Name),
 				},
 			},
 		},
@@ -958,6 +993,9 @@ func (s *Server) handleVirtualMediaRequest(w http.ResponseWriter, r *http.Reques
 // - r: HTTP request
 // - systemName: Name of the system
 func (s *Server) handleVirtualMediaCollection(w http.ResponseWriter, r *http.Request, systemName string) {
+	// Parse the System ID to extract namespace and VM name
+	namespace, vmName := s.parseSystemID(systemName)
+
 	// Find the VM across all accessible chassis
 	var vmFound bool
 	var chassisName string
@@ -969,18 +1007,40 @@ func (s *Server) handleVirtualMediaCollection(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+	// If we have a namespace from enhanced System ID, use it directly
+	if namespace != "" {
+		// Find the chassis config for this namespace
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+			if config.Namespace == namespace {
+				// Verify the VM exists in this namespace
+				_, err = s.kubevirtClient.GetVM(namespace, vmName)
+				if err == nil {
+					vmFound = true
+					chassisName = chassis
+					chassisConfig = config
+					break
+				}
+			}
 		}
+	} else {
+		// Legacy behavior - search across all accessible chassis
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisName = chassis
+				chassisConfig = config
+				break
+			}
 		}
 	}
 
@@ -995,10 +1055,10 @@ func (s *Server) handleVirtualMediaCollection(w http.ResponseWriter, r *http.Req
 		return
 	}
 
-	// Get virtual media devices
-	mediaDevices, err := s.kubevirtClient.GetVMVirtualMedia(chassisConfig.Namespace, systemName)
+	// Get virtual media devices using the correct namespace and VM name
+	mediaDevices, err := s.kubevirtClient.GetVMVirtualMedia(chassisConfig.Namespace, vmName)
 	if err != nil {
-		logger.Error("Failed to get virtual media for VM %s: %v", systemName, err)
+		logger.Error("Failed to get virtual media for VM %s: %v", vmName, err)
 		// Don't fail, just return empty list
 		mediaDevices = []string{}
 	}
@@ -1053,6 +1113,9 @@ func (s *Server) handleVirtualMediaCollection(w http.ResponseWriter, r *http.Req
 // - systemName: Name of the system
 // - mediaID: ID of the virtual media device
 func (s *Server) handleGetVirtualMedia(w http.ResponseWriter, r *http.Request, systemName, mediaID string) {
+	// Parse the System ID to extract namespace and VM name
+	namespace, vmName := s.parseSystemID(systemName)
+
 	// Map Cd to cdrom0 for internal operations
 	internalMediaID := mediaID
 	if mediaID == "Cd" {
@@ -1070,18 +1133,40 @@ func (s *Server) handleGetVirtualMedia(w http.ResponseWriter, r *http.Request, s
 		return
 	}
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+	// If we have a namespace from enhanced System ID, use it directly
+	if namespace != "" {
+		// Find the chassis config for this namespace
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+			if config.Namespace == namespace {
+				// Verify the VM exists in this namespace
+				_, err = s.kubevirtClient.GetVM(namespace, vmName)
+				if err == nil {
+					vmFound = true
+					chassisName = chassis
+					chassisConfig = config
+					break
+				}
+			}
 		}
+	} else {
+		// Legacy behavior - search across all accessible chassis
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisName = chassis
+				chassisConfig = config
+				break
+			}
 		}
 	}
 
@@ -1097,9 +1182,9 @@ func (s *Server) handleGetVirtualMedia(w http.ResponseWriter, r *http.Request, s
 	}
 
 	// Check if media is inserted using the internal media ID
-	inserted, err := s.kubevirtClient.IsVirtualMediaInserted(chassisConfig.Namespace, systemName, internalMediaID)
+	inserted, err := s.kubevirtClient.IsVirtualMediaInserted(chassisConfig.Namespace, vmName, internalMediaID)
 	if err != nil {
-		logger.Error("Failed to check virtual media status for VM %s: %v", systemName, err)
+		logger.Error("Failed to check virtual media status for VM %s: %v", vmName, err)
 		s.sendInternalError(w, "Failed to get virtual media information")
 		return
 	}
@@ -1141,6 +1226,9 @@ func (s *Server) handleGetVirtualMedia(w http.ResponseWriter, r *http.Request, s
 // - systemName: Name of the system
 // - mediaID: ID of the virtual media device
 func (s *Server) handleInsertVirtualMedia(w http.ResponseWriter, r *http.Request, systemName, mediaID string) {
+	// Parse the System ID to extract namespace and VM name
+	namespace, vmName := s.parseSystemID(systemName)
+
 	// Map Cd to cdrom0 for internal operations
 	internalMediaID := mediaID
 	if mediaID == "Cd" {
@@ -1166,18 +1254,40 @@ func (s *Server) handleInsertVirtualMedia(w http.ResponseWriter, r *http.Request
 
 	user := auth.GetUser(r)
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+	// If we have a namespace from enhanced System ID, use it directly
+	if namespace != "" {
+		// Find the chassis config for this namespace
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+			if config.Namespace == namespace {
+				// Verify the VM exists in this namespace
+				_, err = s.kubevirtClient.GetVM(namespace, vmName)
+				if err == nil {
+					vmFound = true
+					chassisName = chassis
+					chassisConfig = config
+					break
+				}
+			}
 		}
+	} else {
+		// Legacy behavior - search across all accessible chassis
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisName = chassis
+				chassisConfig = config
+				break
+			}
 		}
 	}
 
@@ -1193,8 +1303,8 @@ func (s *Server) handleInsertVirtualMedia(w http.ResponseWriter, r *http.Request
 	}
 
 	// Create a task for this operation
-	taskName := fmt.Sprintf("Insert Media %s for VM %s", mediaID, systemName)
-	taskID := s.taskManager.CreateTask(taskName, chassisConfig.Namespace, systemName, internalMediaID, insertRequest.Image)
+	taskName := fmt.Sprintf("Insert Media %s for VM %s", mediaID, vmName)
+	taskID := s.taskManager.CreateTask(taskName, chassisConfig.Namespace, vmName, internalMediaID, insertRequest.Image)
 
 	// Return the task resource with 202 Accepted status
 	task, exists := s.taskManager.GetTask(taskID)
@@ -1227,6 +1337,9 @@ func (s *Server) handleInsertVirtualMedia(w http.ResponseWriter, r *http.Request
 // - systemName: Name of the system
 // - mediaID: ID of the virtual media device
 func (s *Server) handleEjectVirtualMedia(w http.ResponseWriter, r *http.Request, systemName, mediaID string) {
+	// Parse the System ID to extract namespace and VM name
+	namespace, vmName := s.parseSystemID(systemName)
+
 	// Map Cd to cdrom0 for internal operations
 	internalMediaID := mediaID
 	if mediaID == "Cd" {
@@ -1240,18 +1353,40 @@ func (s *Server) handleEjectVirtualMedia(w http.ResponseWriter, r *http.Request,
 
 	user := auth.GetUser(r)
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+	// If we have a namespace from enhanced System ID, use it directly
+	if namespace != "" {
+		// Find the chassis config for this namespace
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+			if config.Namespace == namespace {
+				// Verify the VM exists in this namespace
+				_, err = s.kubevirtClient.GetVM(namespace, vmName)
+				if err == nil {
+					vmFound = true
+					chassisName = chassis
+					chassisConfig = config
+					break
+				}
+			}
 		}
+	} else {
+		// Legacy behavior - search across all accessible chassis
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisName = chassis
+				chassisConfig = config
+				break
+			}
 		}
 	}
 
@@ -1267,9 +1402,9 @@ func (s *Server) handleEjectVirtualMedia(w http.ResponseWriter, r *http.Request,
 	}
 
 	// Eject virtual media using the internal media ID
-	err := s.kubevirtClient.EjectVirtualMedia(chassisConfig.Namespace, systemName, internalMediaID)
+	err := s.kubevirtClient.EjectVirtualMedia(chassisConfig.Namespace, vmName, internalMediaID)
 	if err != nil {
-		logger.Error("Failed to eject virtual media for VM %s: %v", systemName, err)
+		logger.Error("Failed to eject virtual media for VM %s: %v", vmName, err)
 		s.sendInternalError(w, "Failed to eject virtual media")
 		return
 	}
@@ -1309,20 +1444,23 @@ func (s *Server) handleEjectVirtualMedia(w http.ResponseWriter, r *http.Request,
 // - r: HTTP request
 // - systemName: Name of the system
 func (s *Server) handleBootUpdate(w http.ResponseWriter, r *http.Request, systemName string) {
+	// Parse the System ID to extract namespace and VM name
+	namespace, vmName := s.parseSystemID(systemName)
+
 	// Log incoming boot update request for monitoring
-	logger.Info("Received PATCH boot update request for VM %s from %s", systemName, r.RemoteAddr)
+	logger.Info("Received PATCH boot update request for VM %s from %s", vmName, r.RemoteAddr)
 	logger.LogSafeHeaders("Boot update request headers", r.Header, logger.GetCorrelationID(r.Context()))
 
 	// Parse the request body
 	var bootUpdate map[string]interface{}
 	if err := json.NewDecoder(r.Body).Decode(&bootUpdate); err != nil {
-		logger.Error("Failed to parse boot update request body for VM %s: %v", systemName, err)
+		logger.Error("Failed to parse boot update request body for VM %s: %v", vmName, err)
 		s.sendValidationError(w, "Invalid request body", err.Error())
 		return
 	}
 
 	// Log the boot update payload for debugging
-	logger.Info("Boot update payload for VM %s: %+v", systemName, bootUpdate)
+	logger.Info("Boot update payload for VM %s: %+v", vmName, bootUpdate)
 
 	// Find the VM across all accessible chassis
 	var vmFound bool
@@ -1335,18 +1473,40 @@ func (s *Server) handleBootUpdate(w http.ResponseWriter, r *http.Request, system
 		return
 	}
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+	// If we have a namespace from enhanced System ID, use it directly
+	if namespace != "" {
+		// Find the chassis config for this namespace
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+			if config.Namespace == namespace {
+				// Verify the VM exists in this namespace
+				_, err = s.kubevirtClient.GetVM(namespace, vmName)
+				if err == nil {
+					vmFound = true
+					chassisName = chassis
+					chassisConfig = config
+					break
+				}
+			}
 		}
+	} else {
+		// Legacy behavior - search across all accessible chassis
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisName = chassis
+				chassisConfig = config
+				break
+			}
 		}
 	}
 
@@ -1391,9 +1551,9 @@ func (s *Server) handleBootUpdate(w http.ResponseWriter, r *http.Request, system
 	}
 
 	// Update boot configuration
-	err := s.kubevirtClient.SetVMBootOptions(chassisConfig.Namespace, systemName, bootConfig)
+	err := s.kubevirtClient.SetVMBootOptions(chassisConfig.Namespace, vmName, bootConfig)
 	if err != nil {
-		logger.Error("Failed to update boot configuration for VM %s: %v", systemName, err)
+		logger.Error("Failed to update boot configuration for VM %s: %v", vmName, err)
 		s.sendInternalError(w, "Failed to update boot configuration")
 		return
 	}
@@ -1405,14 +1565,14 @@ func (s *Server) handleBootUpdate(w http.ResponseWriter, r *http.Request, system
 			func() {
 				defer func() {
 					if r := recover(); r != nil {
-						logger.Error("Panic recovered in SetBootOrder for VM %s: %v", systemName, r)
+						logger.Error("Panic recovered in SetBootOrder for VM %s: %v", vmName, r)
 						// Don't fail the operation if boot order setting panics
 					}
 				}()
 
-				err = s.kubevirtClient.SetBootOrder(chassisConfig.Namespace, systemName, target)
+				err = s.kubevirtClient.SetBootOrder(chassisConfig.Namespace, vmName, target)
 				if err != nil {
-					logger.Error("Failed to set boot order for VM %s: %v", systemName, err)
+					logger.Error("Failed to set boot order for VM %s: %v", vmName, err)
 					// Don't fail the operation if boot order setting fails
 				}
 			}()
@@ -1420,9 +1580,9 @@ func (s *Server) handleBootUpdate(w http.ResponseWriter, r *http.Request, system
 	}
 
 	// Get updated boot options to return in response
-	bootOptions, err := s.kubevirtClient.GetVMBootOptions(chassisConfig.Namespace, systemName)
+	bootOptions, err := s.kubevirtClient.GetVMBootOptions(chassisConfig.Namespace, vmName)
 	if err != nil {
-		logger.Error("Failed to get updated boot options for VM %s: %v", systemName, err)
+		logger.Error("Failed to get updated boot options for VM %s: %v", vmName, err)
 		bootOptions = map[string]interface{}{
 			"bootSourceOverrideEnabled": "Disabled",
 			"bootSourceOverrideTarget":  "None",
@@ -1431,23 +1591,23 @@ func (s *Server) handleBootUpdate(w http.ResponseWriter, r *http.Request, system
 	}
 
 	// Get real power state
-	powerState, err := s.kubevirtClient.GetVMPowerState(chassisConfig.Namespace, systemName)
+	powerState, err := s.kubevirtClient.GetVMPowerState(chassisConfig.Namespace, vmName)
 	if err != nil {
-		logger.Error("Failed to get power state for VM %s: %v", systemName, err)
+		logger.Error("Failed to get power state for VM %s: %v", vmName, err)
 		powerState = "Unknown"
 	}
 
 	// Get real memory information
-	memoryGB, err := s.kubevirtClient.GetVMMemory(chassisConfig.Namespace, systemName)
+	memoryGB, err := s.kubevirtClient.GetVMMemory(chassisConfig.Namespace, vmName)
 	if err != nil {
-		logger.Warning("Failed to get memory for VM %s: %v", systemName, err)
+		logger.Warning("Failed to get memory for VM %s: %v", vmName, err)
 		memoryGB = 2.0 // Low default fallback
 	}
 
 	// Get real CPU information
-	cpuCount, err := s.kubevirtClient.GetVMCPU(chassisConfig.Namespace, systemName)
+	cpuCount, err := s.kubevirtClient.GetVMCPU(chassisConfig.Namespace, vmName)
 	if err != nil {
-		logger.Warning("Failed to get CPU for VM %s: %v", systemName, err)
+		logger.Warning("Failed to get CPU for VM %s: %v", vmName, err)
 		cpuCount = 1 // Low default fallback
 	}
 
@@ -1657,39 +1817,70 @@ func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request, syste
 		return
 	}
 
-	// Find the VM across all accessible chassis
-	var vmFound bool
-	var chassisName string
+	// Parse the System ID to extract namespace and VM name
+	var vmName, namespace string
 	var chassisConfig *config.ChassisConfig
 
-	user := auth.GetUser(r)
-	if user == nil {
-		s.sendForbidden(w, "Authentication required")
-		return
-	}
+	// Check if this is an enhanced System ID (contains a dot)
+	if strings.Contains(systemName, ".") {
+		// Enhanced System ID format: namespace.vmname
+		parts := strings.SplitN(systemName, ".", 2)
+		if len(parts) != 2 {
+			s.sendNotFound(w, "Invalid enhanced System ID format")
+			return
+		}
+		namespace = parts[0]
+		vmName = parts[1]
 
-	for _, chassis := range user.Chassis {
-		config, err := s.config.GetChassisByName(chassis)
-		if err != nil {
-			continue
+		// Find the chassis configuration for this namespace
+		var found bool
+		for _, chassis := range s.config.Chassis {
+			if chassis.Namespace == namespace {
+				chassisConfig = &chassis
+				found = true
+				break
+			}
 		}
 
-		_, err = s.kubevirtClient.GetVM(config.Namespace, systemName)
-		if err == nil {
-			vmFound = true
-			chassisName = chassis
-			chassisConfig = config
-			break
+		if !found {
+			s.sendNotFound(w, "Chassis not found for namespace")
+			return
 		}
-	}
+	} else {
+		// Legacy System ID format: just vmname
+		vmName = systemName
 
-	if !vmFound {
-		s.sendNotFound(w, "System not found")
-		return
+		// Find the VM across all accessible chassis
+		user := auth.GetUser(r)
+		if user == nil {
+			s.sendForbidden(w, "Authentication required")
+			return
+		}
+
+		var vmFound bool
+		for _, chassis := range user.Chassis {
+			config, err := s.config.GetChassisByName(chassis)
+			if err != nil {
+				continue
+			}
+
+			_, err = s.kubevirtClient.GetVM(config.Namespace, vmName)
+			if err == nil {
+				vmFound = true
+				chassisConfig = config
+				namespace = config.Namespace
+				break
+			}
+		}
+
+		if !vmFound {
+			s.sendNotFound(w, "System not found")
+			return
+		}
 	}
 
 	// Check if user has access to this chassis
-	if !auth.HasChassisAccess(r, chassisName) {
+	if !auth.HasChassisAccess(r, chassisConfig.Name) {
 		s.sendForbidden(w, "Access denied to system")
 		return
 	}
@@ -1718,12 +1909,15 @@ func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request, syste
 	}
 
 	// Execute the power action
-	err := s.kubevirtClient.SetVMPowerState(chassisConfig.Namespace, systemName, powerState)
+	err := s.kubevirtClient.SetVMPowerState(namespace, vmName, powerState)
 	if err != nil {
-		logger.Error("Failed to set power state for VM %s: %v", systemName, err)
+		logger.Error("Failed to set power state for VM %s: %v", vmName, err)
 		s.sendInternalError(w, fmt.Sprintf("Failed to execute power action: %v", err))
 		return
 	}
+
+	// Generate the correct System ID for the response
+	responseSystemID := config.GenerateSystemID(s.config.SystemIDConvention, namespace, vmName)
 
 	// Return success response with proper Redfish format
 	w.Header().Set("Content-Type", "application/json")
@@ -1732,7 +1926,7 @@ func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request, syste
 	s.encodeJSONResponse(w, map[string]interface{}{
 		"@odata.context": "/redfish/v1/$metadata#ActionResponse.ActionResponse",
 		"@odata.type":    "#ActionResponse.v1_0_0.ActionResponse",
-		"@odata.id":      fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", systemName),
+		"@odata.id":      fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", responseSystemID),
 		"Id":             "Reset",
 		"Name":           "Reset Action",
 		"Status": map[string]string{
@@ -1747,7 +1941,7 @@ func (s *Server) handlePowerAction(w http.ResponseWriter, r *http.Request, syste
 	})
 
 	// Invalidate related cache entries after power state change
-	s.responseCache.Invalidate(fmt.Sprintf("Systems/%s", systemName))
+	s.responseCache.Invalidate(fmt.Sprintf("Systems/%s", responseSystemID))
 	s.responseCache.Invalidate("Systems") // Invalidate systems collection
 	logger.Debug("Invalidated cache for system %s after power action %s", systemName, resetRequest.ResetType)
 }
@@ -2160,4 +2354,21 @@ func (s *Server) encodeJSONResponse(w http.ResponseWriter, data interface{}) {
 		logger.Error("Failed to encode JSON response: %v", err)
 		http.Error(w, "Internal server error", http.StatusInternalServerError)
 	}
+}
+
+// parseSystemID parses a System ID and returns the namespace and VM name.
+// For enhanced System IDs (format: "namespace.vmname"), it extracts both parts.
+// For legacy System IDs (format: "vmname"), it returns empty namespace and the VM name.
+// This function is used by all handlers that need to work with both legacy and enhanced System IDs.
+func (s *Server) parseSystemID(systemID string) (namespace, vmName string) {
+	// Check if this is an enhanced System ID (contains a dot)
+	if strings.Contains(systemID, ".") {
+		parts := strings.SplitN(systemID, ".", 2)
+		if len(parts) == 2 {
+			return parts[0], parts[1] // namespace.vmname
+		}
+	}
+
+	// Legacy System ID or invalid format - return as VM name with empty namespace
+	return "", systemID
 }

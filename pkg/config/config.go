@@ -69,12 +69,13 @@ import (
 // It contains all settings for the Redfish API server including server,
 // chassis, authentication, and KubeVirt-specific configurations.
 type Config struct {
-	Server     ServerConfig     `mapstructure:"server"`
-	Chassis    []ChassisConfig  `mapstructure:"chassis"`
-	Auth       AuthConfig       `mapstructure:"authentication"`
-	KubeVirt   KubeVirtConfig   `mapstructure:"kubevirt"`
-	CDI        CDIConfig        `mapstructure:"cdi"`
-	DataVolume DataVolumeConfig `mapstructure:"datavolume"`
+	Server            ServerConfig     `mapstructure:"server"`
+	Chassis           []ChassisConfig  `mapstructure:"chassis"`
+	Auth              AuthConfig       `mapstructure:"authentication"`
+	KubeVirt          KubeVirtConfig   `mapstructure:"kubevirt"`
+	CDI               CDIConfig        `mapstructure:"cdi"`
+	DataVolume        DataVolumeConfig `mapstructure:"datavolume"`
+	SystemIDConvention string          `mapstructure:"system_id_convention"` // "legacy" or "enhanced"
 }
 
 // ServerConfig holds HTTP server configuration including host, port, and TLS settings.
@@ -238,6 +239,7 @@ func setDefaults() {
 	viper.SetDefault("datavolume.vm_update_timeout", "30s")
 	viper.SetDefault("datavolume.iso_download_timeout", "30m")
 	viper.SetDefault("datavolume.helper_image", "alpine:latest")
+	viper.SetDefault("system_id_convention", "legacy") // Default to legacy for backward compatibility
 }
 
 // validateConfig validates the configuration to ensure all required fields are present
@@ -269,6 +271,11 @@ func validateConfig(config *Config) error {
 	// Validate DataVolume configuration
 	if err := validateDataVolumeConfig(&config.DataVolume); err != nil {
 		validationErrors = append(validationErrors, fmt.Sprintf("datavolume: %v", err))
+	}
+
+	// Validate System ID convention
+	if err := validateSystemIDConvention(config.SystemIDConvention); err != nil {
+		validationErrors = append(validationErrors, fmt.Sprintf("system_id_convention: %v", err))
 	}
 
 	// Check for duplicate chassis names
@@ -437,6 +444,28 @@ func validateDataVolumeConfig(dv *DataVolumeConfig) error {
 	}
 
 	return nil
+}
+
+// validateSystemIDConvention validates the SystemIDConvention field.
+func validateSystemIDConvention(convention string) error {
+	if convention != "legacy" && convention != "enhanced" {
+		return errors.NewValidationError("Invalid System ID convention", fmt.Sprintf("system_id_convention must be 'legacy' or 'enhanced', got '%s'", convention))
+	}
+	return nil
+}
+
+// GenerateSystemID generates the correct System ID based on the convention.
+// - legacy: returns the VM name as-is (e.g., "ztp-jinkit-kvm-00")
+// - enhanced: returns namespace.vmname (e.g., "jinkit-kvm.ztp-jinkit-kvm-00")
+func GenerateSystemID(convention, namespace, vmName string) string {
+	switch convention {
+	case "enhanced":
+		return fmt.Sprintf("%s.%s", namespace, vmName)
+	case "legacy":
+		fallthrough
+	default:
+		return vmName
+	}
 }
 
 // validateUniqueChassisNames ensures all chassis names are unique

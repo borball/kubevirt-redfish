@@ -25,6 +25,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"io"
+	"math/rand"
 	"net/http"
 	"net/url"
 	"os"
@@ -94,6 +95,9 @@ func NewClient(configPath string, timeout time.Duration, appConfig interface{}) 
 	if err != nil {
 		return nil, fmt.Errorf("failed to create kubeconfig: %w", err)
 	}
+
+	// Initialize random seed for unique PVC name generation
+	rand.Seed(time.Now().UnixNano())
 
 	// Create Kubernetes client
 	kubernetesClient, err := kubernetes.NewForConfig(config)
@@ -1466,9 +1470,9 @@ func (c *Client) insertVirtualMediaAsync(namespace, name, mediaID, imageURL stri
 	}
 	logger.Debug("DEBUG: Parsed URL - scheme=%s, host=%s", u.Scheme, u.Host)
 
-	// Use bootiso instead of cdrom0 for PVC naming
-	dataVolumeName := fmt.Sprintf("%s-bootiso", name)
-	logger.Debug("DEBUG: Generated dataVolumeName=%s", dataVolumeName)
+	// Generate unique PVC name with timestamp and random suffix to avoid conflicts
+	dataVolumeName := c.generateUniquePVCName(name)
+	logger.Debug("DEBUG: Generated unique dataVolumeName=%s", dataVolumeName)
 
 	// First, create the CD-ROM device in the VM spec
 	// Use lowercase device name for KubeVirt compatibility
@@ -1640,19 +1644,50 @@ func (c *Client) insertVirtualMediaAsync(namespace, name, mediaID, imageURL stri
 		}
 
 		logger.Debug("DEBUG: Creating PVC %s in namespace %s", dataVolumeName, namespace)
-		_, err := c.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
-		if err != nil {
-			if strings.Contains(err.Error(), "already exists") {
-				logger.Info("PVC %s already exists, reusing it", dataVolumeName)
-				logger.Debug("DEBUG: PVC %s already exists, reusing it", dataVolumeName)
+		
+		// Check if PVC already exists and validate its state
+		existingPVC, err := c.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, dataVolumeName, metav1.GetOptions{})
+		if err == nil {
+			// PVC exists, check its state
+			if c.isPVCUsable(existingPVC) {
+				logger.Info("PVC %s already exists and is usable, reusing it", dataVolumeName)
+				logger.Debug("DEBUG: PVC %s already exists and is usable, reusing it", dataVolumeName)
 			} else {
-				logger.Debug("DEBUG: Failed to create PVC %s: %v", dataVolumeName, err)
-				return fmt.Errorf("failed to create PVC: %w", err)
+				logger.Info("PVC %s exists but is not usable (status: %s), deleting and recreating", dataVolumeName, existingPVC.Status.Phase)
+				logger.Debug("DEBUG: PVC %s exists but is not usable, deleting and recreating", dataVolumeName)
+				// Delete the unusable PVC
+				err = c.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Delete(ctx, dataVolumeName, metav1.DeleteOptions{})
+				if err != nil {
+					logger.Debug("DEBUG: Failed to delete unusable PVC %s: %v", dataVolumeName, err)
+					return fmt.Errorf("failed to delete unusable PVC: %w", err)
+				}
+				// Wait a moment for deletion to complete
+				time.Sleep(2 * time.Second)
 			}
-		} else {
-			logger.Info("Created new PVC %s for virtual media", dataVolumeName)
-			logger.Debug("DEBUG: Successfully created new PVC %s for virtual media", dataVolumeName)
 		}
+		
+		// Create the PVC with retry logic
+		err = c.retryWithBackoff(fmt.Sprintf("create PVC %s", dataVolumeName), func() error {
+			var createErr error
+			_, createErr = c.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Create(ctx, pvc, metav1.CreateOptions{})
+			if createErr != nil {
+				if strings.Contains(createErr.Error(), "already exists") {
+					logger.Debug("DEBUG: PVC %s already exists (race condition), will use existing PVC", dataVolumeName)
+					// PVC already exists, we can use it
+					return nil // Success - we'll use the existing PVC
+				}
+				logger.Debug("DEBUG: Failed to create PVC %s: %v", dataVolumeName, createErr)
+				return fmt.Errorf("failed to create PVC: %w", createErr)
+			}
+			return nil
+		})
+		
+		if err != nil {
+			return fmt.Errorf("failed to create PVC after retries: %w", err)
+		}
+		
+		logger.Info("Created new PVC %s for virtual media", dataVolumeName)
+		logger.Debug("DEBUG: Successfully created new PVC %s for virtual media", dataVolumeName)
 
 		// Use helper pod to copy ISO to PVC
 		logger.Debug("DEBUG: Calling copyISOToPVC for PVC %s", dataVolumeName)
@@ -2752,4 +2787,36 @@ func (c *Client) cleanupExistingDataVolume(namespace, dataVolumeName string) err
 	}
 
 	return nil
+}
+
+// generateUniquePVCName generates a unique PVC name with timestamp and random suffix
+// to avoid conflicts when multiple operations target the same VM
+func (c *Client) generateUniquePVCName(vmName string) string {
+	timestamp := time.Now().Unix()
+	// Generate a random 6-character suffix to further reduce collision probability
+	randomSuffix := fmt.Sprintf("%06d", rand.Intn(1000000))
+	return fmt.Sprintf("%s-bootiso-%d-%s", vmName, timestamp, randomSuffix)
+}
+
+// isPVCUsable checks if a PVC is in a usable state for mounting
+func (c *Client) isPVCUsable(pvc *corev1.PersistentVolumeClaim) bool {
+	// Check if PVC is bound and ready
+	if pvc.Status.Phase == corev1.ClaimBound {
+		return true
+	}
+	
+	// Check if PVC is pending but not in a failed state
+	if pvc.Status.Phase == corev1.ClaimPending {
+		// Check if there are any conditions that indicate failure
+		for _, condition := range pvc.Status.Conditions {
+			if condition.Type == "Failed" && condition.Status == corev1.ConditionTrue {
+				return false
+			}
+		}
+		// Pending without failure conditions is considered usable (will be bound soon)
+		return true
+	}
+	
+	// Lost or other states are not usable
+	return false
 }

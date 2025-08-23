@@ -20,6 +20,8 @@ data:
       port: {{ .Values.server.port }}
       tls:
         enabled: {{ .Values.server.tls.enabled }}
+    
+    system_id_convention: "{{ .Values.server.system_id_convention }}"
 
     chassis:
     {{- range .Values.chassis }}
