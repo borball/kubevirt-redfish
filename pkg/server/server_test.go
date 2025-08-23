@@ -2042,7 +2042,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 1: Valid boot update request with Boot field
 	t.Run("Valid_boot_update_with_Boot_field", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once",
 				"BootSourceOverrideTarget": "Cd",
@@ -2064,7 +2064,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2077,7 +2077,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 2: Valid boot update request with direct fields (backward compatibility)
 	t.Run("Valid_boot_update_with_direct_fields", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"BootSourceOverrideEnabled": "Once",
 			"BootSourceOverrideTarget": "Hdd",
 			"BootSourceOverrideMode": "UEFI"
@@ -2097,7 +2097,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2110,7 +2110,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 3: Invalid JSON request body
 	t.Run("Invalid_JSON_request_body", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once",
 				"BootSourceOverrideTarget": "Cd",
@@ -2131,7 +2131,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -2143,7 +2143,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 4: No authentication context
 	t.Run("No_authentication_context", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once"
 			}
@@ -2153,7 +2153,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 		// No authentication context added
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
 
@@ -2165,7 +2165,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 5: Empty request body
 	t.Run("Empty_request_body", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(""))
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(""))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -2181,7 +2181,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -2193,7 +2193,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 6: Request with only BootSourceOverrideEnabled
 	t.Run("Only_BootSourceOverrideEnabled", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once"
 			}
@@ -2213,7 +2213,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2226,7 +2226,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 7: Request with only BootSourceOverrideTarget
 	t.Run("Only_BootSourceOverrideTarget", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideTarget": "Cd"
 			}
@@ -2246,7 +2246,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2259,7 +2259,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 8: Request with only BootSourceOverrideMode
 	t.Run("Only_BootSourceOverrideMode", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideMode": "UEFI"
 			}
@@ -2279,7 +2279,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2292,7 +2292,7 @@ func TestHandleBootUpdate(t *testing.T) {
 
 	// Test 9: Request with no Boot field and no direct fields
 	t.Run("No_boot_configuration", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"OtherField": "value"
 		}`))
 		req.Header.Set("Content-Type", "application/json")
@@ -2310,7 +2310,7 @@ func TestHandleBootUpdate(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2915,9 +2915,9 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 	mockClient := &kubevirt.Client{}
 	server := NewServer(testConfig, mockClient)
 
-	// Test 1: Valid boot update request with Boot field
+			// Test 1: Valid boot update request with Boot field
 	t.Run("Valid_boot_update_with_Boot_field", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once",
 				"BootSourceOverrideTarget": "Cd",
@@ -2939,7 +2939,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2952,7 +2952,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 
 	// Test 2: Valid boot update request with direct fields (backward compatibility)
 	t.Run("Valid_boot_update_with_direct_fields", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"BootSourceOverrideEnabled": "Once",
 			"BootSourceOverrideTarget": "Hdd",
 			"BootSourceOverrideMode": "UEFI"
@@ -2972,7 +2972,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		// Should return 404 since VM doesn't exist in mock client
 		assert.Equal(t, http.StatusNotFound, w.Code)
@@ -2985,7 +2985,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 
 	// Test 3: Invalid JSON request body
 	t.Run("Invalid_JSON_request_body", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once",
 				"BootSourceOverrideTarget": "Cd",
@@ -3006,7 +3006,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 
@@ -3018,7 +3018,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 
 	// Test 4: No authentication context
 	t.Run("No_authentication_context", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(`{
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
 				"BootSourceOverrideEnabled": "Once"
 			}
@@ -3028,7 +3028,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 
 		// No authentication context added
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		assert.Equal(t, http.StatusForbidden, w.Code)
 
@@ -3040,7 +3040,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 
 	// Test 5: Empty request body
 	t.Run("Empty_request_body", func(t *testing.T) {
-		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/test-vm", strings.NewReader(""))
+		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(""))
 		req.Header.Set("Content-Type", "application/json")
 		w := httptest.NewRecorder()
 
@@ -3056,7 +3056,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 		ctx := logger.WithAuth(req.Context(), authCtx)
 		req = req.WithContext(ctx)
 
-		server.handleBootUpdate(w, req, "test-vm")
+		server.handleBootUpdate(w, req, "default.test-vm")
 
 		assert.Equal(t, http.StatusBadRequest, w.Code)
 

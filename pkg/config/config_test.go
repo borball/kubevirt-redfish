@@ -247,6 +247,7 @@ func TestValidateConfig(t *testing.T) {
 					ISODownloadTimeout: "30m",
 					HelperImage:        "alpine:latest",
 				},
+				SystemIDConvention: "legacy",
 			},
 			wantErr: false,
 		},
@@ -280,6 +281,7 @@ func TestValidateConfig(t *testing.T) {
 				DataVolume: DataVolumeConfig{
 					StorageSize: "10Gi",
 				},
+				SystemIDConvention: "legacy",
 			},
 			wantErr: true,
 			errType: errors.ErrorTypeValidation,
@@ -314,6 +316,7 @@ func TestValidateConfig(t *testing.T) {
 				DataVolume: DataVolumeConfig{
 					StorageSize: "10Gi",
 				},
+				SystemIDConvention: "legacy",
 			},
 			wantErr: true,
 			errType: errors.ErrorTypeValidation,
@@ -353,6 +356,7 @@ func TestValidateConfig(t *testing.T) {
 				DataVolume: DataVolumeConfig{
 					StorageSize: "10Gi",
 				},
+				SystemIDConvention: "legacy",
 			},
 			wantErr: true,
 			errType: errors.ErrorTypeValidation,
@@ -381,6 +385,7 @@ func TestValidateConfig(t *testing.T) {
 				DataVolume: DataVolumeConfig{
 					StorageSize: "10Gi",
 				},
+				SystemIDConvention: "legacy",
 			},
 			wantErr: true,
 			errType: errors.ErrorTypeValidation,
@@ -415,6 +420,7 @@ func TestValidateConfig(t *testing.T) {
 				DataVolume: DataVolumeConfig{
 					StorageSize: "10Gi",
 				},
+				SystemIDConvention: "legacy",
 			},
 			wantErr: true,
 			errType: errors.ErrorTypeValidation,
@@ -829,6 +835,7 @@ func TestEnvironmentVariableOverrides(t *testing.T) {
 			StorageSize: "10Gi",
 			HelperImage: "alpine:latest",
 		},
+		SystemIDConvention: "legacy",
 	}
 
 	// Note: This test would require mocking viper to properly test environment variable overrides
