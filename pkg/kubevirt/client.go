@@ -1644,7 +1644,7 @@ func (c *Client) insertVirtualMediaAsync(namespace, name, mediaID, imageURL stri
 		}
 
 		logger.Debug("DEBUG: Creating PVC %s in namespace %s", dataVolumeName, namespace)
-		
+
 		// Check if PVC already exists and validate its state
 		existingPVC, err := c.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, dataVolumeName, metav1.GetOptions{})
 		if err == nil {
@@ -1665,7 +1665,7 @@ func (c *Client) insertVirtualMediaAsync(namespace, name, mediaID, imageURL stri
 				time.Sleep(2 * time.Second)
 			}
 		}
-		
+
 		// Create the PVC with retry logic
 		err = c.retryWithBackoff(fmt.Sprintf("create PVC %s", dataVolumeName), func() error {
 			var createErr error
@@ -1681,11 +1681,11 @@ func (c *Client) insertVirtualMediaAsync(namespace, name, mediaID, imageURL stri
 			}
 			return nil
 		})
-		
+
 		if err != nil {
 			return fmt.Errorf("failed to create PVC after retries: %w", err)
 		}
-		
+
 		logger.Info("Created new PVC %s for virtual media", dataVolumeName)
 		logger.Debug("DEBUG: Successfully created new PVC %s for virtual media", dataVolumeName)
 
@@ -2804,7 +2804,7 @@ func (c *Client) isPVCUsable(pvc *corev1.PersistentVolumeClaim) bool {
 	if pvc.Status.Phase == corev1.ClaimBound {
 		return true
 	}
-	
+
 	// Check if PVC is pending but not in a failed state
 	if pvc.Status.Phase == corev1.ClaimPending {
 		// Check if there are any conditions that indicate failure
@@ -2816,7 +2816,7 @@ func (c *Client) isPVCUsable(pvc *corev1.PersistentVolumeClaim) bool {
 		// Pending without failure conditions is considered usable (will be bound soon)
 		return true
 	}
-	
+
 	// Lost or other states are not usable
 	return false
 }

@@ -69,13 +69,13 @@ import (
 // It contains all settings for the Redfish API server including server,
 // chassis, authentication, and KubeVirt-specific configurations.
 type Config struct {
-	Server            ServerConfig     `mapstructure:"server"`
-	Chassis           []ChassisConfig  `mapstructure:"chassis"`
-	Auth              AuthConfig       `mapstructure:"authentication"`
-	KubeVirt          KubeVirtConfig   `mapstructure:"kubevirt"`
-	CDI               CDIConfig        `mapstructure:"cdi"`
-	DataVolume        DataVolumeConfig `mapstructure:"datavolume"`
-	SystemIDConvention string          `mapstructure:"system_id_convention"` // "legacy" or "enhanced"
+	Server             ServerConfig     `mapstructure:"server"`
+	Chassis            []ChassisConfig  `mapstructure:"chassis"`
+	Auth               AuthConfig       `mapstructure:"authentication"`
+	KubeVirt           KubeVirtConfig   `mapstructure:"kubevirt"`
+	CDI                CDIConfig        `mapstructure:"cdi"`
+	DataVolume         DataVolumeConfig `mapstructure:"datavolume"`
+	SystemIDConvention string           `mapstructure:"system_id_convention"` // "legacy" or "enhanced"
 }
 
 // ServerConfig holds HTTP server configuration including host, port, and TLS settings.
