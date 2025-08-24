@@ -2915,7 +2915,7 @@ func TestHandleBootUpdateDirect(t *testing.T) {
 	mockClient := &kubevirt.Client{}
 	server := NewServer(testConfig, mockClient)
 
-			// Test 1: Valid boot update request with Boot field
+	// Test 1: Valid boot update request with Boot field
 	t.Run("Valid_boot_update_with_Boot_field", func(t *testing.T) {
 		req := httptest.NewRequest("PATCH", "/redfish/v1/Systems/default.test-vm", strings.NewReader(`{
 			"Boot": {
