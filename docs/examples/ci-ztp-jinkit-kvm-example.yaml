@@ -1,0 +1,194 @@
+---
+apiVersion: siteconfig.open-cluster-management.io/v1alpha1
+kind: ClusterInstance
+metadata:
+  name: jinkit-kvm
+  namespace: jinkit-kvm
+spec:
+  cpuPartitioningMode: None
+  clusterName: jinkit-kvm
+  clusterImageSetNameRef: prerelease-bgp-4.20
+  machineNetwork:
+    - cidr: 192.168.3.0/24
+  networkType: OVNKubernetes
+  ingressVIPs:
+    - 192.168.3.175
+  sshPublicKey: ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAACAQDE1F7Fz3MGgOzst9h/2+5/pbeqCfFFhLfaS0Iu4Bhsr7RenaTdzVpbT+9WpSrrjdxDK9P3KProPwY2njgItOEgfJO6MnRLE9dQDzOUIQ8caIH7olzxy60dblonP5A82EuVUnZ0IGmAWSzUWsKef793tWjlRxl27eS1Bn8zbiI+m91Q8ypkLYSB9MMxQehupfzNzJpjVfA5dncZ2S7C8TFIPFtwBe9ITEb+w2phWvAE0SRjU3rLXwCOWHT+7NRwkFfhK/moalPGDIyMjATPOJrtKKQtzSdyHeh9WyKOjJu8tXiM/4jFpOYmg/aMJeGrO/9fdxPe+zPismC/FaLuv0OACgJ5b13tIfwD02OfB2J4+qXtTz2geJVirxzkoo/6cKtblcN/JjrYjwhfXR/dTehY59srgmQ5V1hzbUx1e4lMs+yZ78Xrf2QO+7BikKJsy4CDHqvRdcLlpRq1pe3R9oODRdoFZhkKWywFCpi52ioR4CVbc/tCewzMzNSKZ/3P0OItBi5IA5ex23dEVO/Mz1uyPrjgVx/U2N8J6yo9OOzX/Gftv/e3RKwGIUPpqZpzIUH/NOdeTtpoSIaL5t8Ki8d3eZuiLZJY5gan7tKUWDAL0JvJK+EEzs1YziBh91Dx1Yit0YeD+ztq/jOl0S8d0G3Q9BhwklILT6PuBI2nAEOS0Q==
+  extraLabels:
+    ManagedCluster:
+      csi-nfs: 'false'
+      vendor: OpenShift
+      auth: ldap
+      cnv: 'false'
+      name: jinkit-kvm
+      sriov: 'false'
+      sno: 'false'
+      region: east-us
+      cloud: BareMetal
+      talm-upgrade: 'false'
+      pao: 'false'
+  apiVIPs:
+    - 192.168.3.176
+  nodes:
+    - nodeLabels:
+        demo: ztp-cnv
+      automatedCleaningMode: disabled
+      nodeNetwork:
+        config:
+          dns-resolver:
+            config:
+              search:
+                - lab.ocp.run
+              server:
+                - 192.168.3.5
+          interfaces:
+            - ipv4:
+                address:
+                  - ip: 192.168.3.160
+                    prefix-length: 24
+                enabled: true
+              ipv6:
+                autoconf: false
+                dhcp: false
+                enabled: false
+              mtu: 1500
+              name: enp1s0
+              state: up
+              type: ethernet
+          routes:
+            config:
+              - destination: 0.0.0.0/0
+                next-hop-address: 192.168.3.1
+                next-hop-interface: enp1s0
+                table-id: 254
+        interfaces:
+          - macAddress: '00:50:56:03:17:00'
+            name: enp1s0
+      bmcCredentialsName:
+        name: bmc-ztp-jinkit-kvm-00
+      ironicInspect: ''
+      hostName: ztp-jinkit-kvm-00
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bootMode: UEFISecureBoot
+      role: master
+      bootMACAddress: '00:50:56:03:17:00'
+      templateRefs:
+        - name: ai-node-templates-v1
+          namespace: open-cluster-management
+      cpuArchitecture: x86_64
+      bmcAddress: 'redfish-virtualmedia+https://kubevirt-redfish-jinkit-kvm.apps.hub.lab.ocp.run/redfish/v1/Systems/ztp-jinkit-kvm-00'
+    - nodeLabels:
+        demo: ztp-cnv
+      automatedCleaningMode: disabled
+      nodeNetwork:
+        config:
+          dns-resolver:
+            config:
+              search:
+                - lab.ocp.run
+              server:
+                - 192.168.3.5
+          interfaces:
+            - ipv4:
+                address:
+                  - ip: 192.168.3.161
+                    prefix-length: 24
+                enabled: true
+              ipv6:
+                autoconf: false
+                dhcp: false
+                enabled: false
+              mtu: 1500
+              name: enp1s0
+              state: up
+              type: ethernet
+          routes:
+            config:
+              - destination: 0.0.0.0/0
+                next-hop-address: 192.168.3.1
+                next-hop-interface: enp1s0
+                table-id: 254
+        interfaces:
+          - macAddress: '00:50:56:03:17:01'
+            name: enp1s0
+      bmcCredentialsName:
+        name: bmc-ztp-jinkit-kvm-01
+      ironicInspect: ''
+      hostName: ztp-jinkit-kvm-01
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bootMode: UEFISecureBoot
+      role: master
+      bootMACAddress: '00:50:56:03:17:01'
+      templateRefs:
+        - name: ai-node-templates-v1
+          namespace: open-cluster-management
+      cpuArchitecture: x86_64
+      bmcAddress: 'redfish-virtualmedia+https://kubevirt-redfish-jinkit-kvm.apps.hub.lab.ocp.run/redfish/v1/Systems/ztp-jinkit-kvm-01'
+    - nodeLabels:
+        demo: ztp-cnv
+      automatedCleaningMode: disabled
+      nodeNetwork:
+        config:
+          dns-resolver:
+            config:
+              search:
+                - lab.ocp.run
+              server:
+                - 192.168.3.5
+          interfaces:
+            - ipv4:
+                address:
+                  - ip: 192.168.3.162
+                    prefix-length: 24
+                enabled: true
+              ipv6:
+                autoconf: false
+                dhcp: false
+                enabled: false
+              mtu: 1500
+              name: enp1s0
+              state: up
+              type: ethernet
+          routes:
+            config:
+              - destination: 0.0.0.0/0
+                next-hop-address: 192.168.3.1
+                next-hop-interface: enp1s0
+                table-id: 254
+        interfaces:
+          - macAddress: '00:50:56:03:17:02'
+            name: enp1s0
+      bmcCredentialsName:
+        name: bmc-ztp-jinkit-kvm-02
+      ironicInspect: ''
+      hostName: ztp-jinkit-kvm-02
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bootMode: UEFISecureBoot
+      role: master
+      bootMACAddress: '00:50:56:03:17:02'
+      templateRefs:
+        - name: ai-node-templates-v1
+          namespace: open-cluster-management
+      cpuArchitecture: x86_64
+      bmcAddress: 'redfish-virtualmedia+https://kubevirt-redfish-jinkit-kvm.apps.hub.lab.ocp.run/redfish/v1/Systems/ztp-jinkit-kvm-02'
+  clusterNetwork:
+    - cidr: 10.128.0.0/14
+      hostPrefix: 23
+  additionalNTPSources:
+    - 0.pool.ntp.org
+    - 1.pool.ntp.org
+    - 2.pool.ntp.org
+    - 3.pool.ntp.org
+  baseDomain: lab.ocp.run
+  holdInstallation: false
+  serviceNetwork:
+    - cidr: 172.30.0.0/16
+  templateRefs:
+    - name: ai-cluster-templates-v1
+      namespace: open-cluster-management
+  cpuArchitecture: x86_64
+  pullSecretRef:
+    name: pullsecret-jinkit-kvm

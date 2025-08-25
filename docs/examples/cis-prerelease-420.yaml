@@ -1,0 +1,7 @@
+---
+apiVersion: hive.openshift.io/v1
+kind: ClusterImageSet
+metadata:
+  name: prerelease-bgp-4.20
+spec:
+  releaseImage: quay.io/openshift-release-dev/ocp-release:4.20.0-ec.5-x86_64

@@ -1,0 +1,147 @@
+---
+# You can edit these settings for version, but only if you know what you're doing!
+# BE CAREFUL WITH THESE SETTINGS!
+global:
+  image:
+    pullPolicy: Always
+    repository: quay.io/bjozsa-redhat/kubevirt-redfish
+    tag: v0.2.2
+  # THIS NAMESPACE YOU WILL NEED TO CHANGE FOR YOUR ENVIRONMENT: BUT NOT FOR THE DEMONSTRATION!
+  namespace: jinkit-kvm
+
+# Most of these settings you may need to change for your environment.
+# START OF USER SETTINGS
+authentication:
+  users:
+  - chassis:
+    - jinkit-kvm
+    password: admin123
+    username: admin
+  - chassis:
+    - jinkit-kvm
+    password: test123
+    username: test
+chassis:
+- description: jinkit KVM cluster with test VMs
+  name: jinkit-kvm
+  namespace: jinkit-kvm
+  service_account: kubevirt-redfish
+  vm_selector:
+    labels:
+      redfish-enabled: "true"
+route:
+  enabled: true
+  host: kubevirt-redfish-jinkit-kvm.apps.hub.lab.ocp.run
+  tls:
+    insecureEdgeTerminationPolicy: Redirect
+    termination: edge
+# END OFUSER SETTINGS
+
+# Most of these settings you will not need to change. They are for development purposes only!
+# START OF DEVELOPMENT SETTINGS
+nodeSelector: {}
+tolerations: []
+affinity: {}
+deployment:
+  replicas: 1
+  labels: {}
+  container:
+    env:
+      CONFIG_PATH: /app/config/config.yaml
+      LOG_LEVEL: debug
+      REDFISH_LOG_LEVEL: DEBUG
+      REDFISH_LOGGING_ENABLED: "true"
+    livenessProbe:
+      failureThreshold: 3
+      httpGet:
+        path: /redfish/v1/
+        port: 8443
+        scheme: HTTP
+      initialDelaySeconds: 30
+      periodSeconds: 10
+      timeoutSeconds: 5
+    name: kubevirt-redfish
+    ports:
+    - containerPort: 8443
+      name: http
+      protocol: TCP
+    readinessProbe:
+      failureThreshold: 3
+      httpGet:
+        path: /redfish/v1/
+        port: 8443
+        scheme: HTTP
+      initialDelaySeconds: 5
+      periodSeconds: 5
+      timeoutSeconds: 3
+    resources:
+      limits:
+        cpu: 500m
+        memory: 2Gi
+      requests:
+        cpu: 100m
+        memory: 512Mi
+    volumeMounts:
+    - mountPath: /app/config
+      name: config-volume
+      readOnly: true
+    - mountPath: /tmp
+      name: temp-storage
+      readOnly: false
+configMap:
+  enabled: true
+  name: kubevirt-redfish-config
+kubevirt:
+  allow_insecure_tls: true
+  api_version: v1
+  timeout: 60
+volumes:
+  config:
+    configMap:
+      name: kubevirt-redfish-config
+    name: config-volume
+  temp:
+    emptyDir:
+      sizeLimit: 50Gi
+    name: temp-storage
+podSecurityContext:
+  runAsNonRoot: true
+rbac:
+  clusterRole:
+    create: true
+    name: kubevirt-redfish-role
+  clusterRoleBinding:
+    create: true
+    name: kubevirt-redfish-binding
+  enabled: true
+  serviceAccount:
+    create: true
+    name: kubevirt-redfish
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+    - ALL
+  runAsNonRoot: true
+datavolume:
+  allow_insecure_tls: true
+  iso_download_timeout: 30m
+  pvc_cleanup_delay: 1s
+  storage_class: lvms-vg1-immediate
+  storage_size: 3Gi
+  vm_update_timeout: 2m
+service:
+  enabled: true
+  ports:
+  - name: http
+    port: 8443
+    protocol: TCP
+    targetPort: 8443
+  type: ClusterIP
+server:
+  host: 0.0.0.0
+  port: 8443
+  system_id_convention: enhanced
+  tls:
+    enabled: false
+# END OF DEVELOPMENT SETTINGS

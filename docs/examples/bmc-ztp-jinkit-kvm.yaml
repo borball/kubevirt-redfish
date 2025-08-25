@@ -1,0 +1,38 @@
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bmc-ztp-jinkit-kvm-00
+  namespace: jinkit-kvm
+  labels:
+    environment.metal3.io: baremetal
+type: Opaque 
+data:
+  password: YWRtaW4xMjM=
+  username: YWRtaW4=
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bmc-ztp-jinkit-kvm-01
+  namespace: jinkit-kvm
+  labels:
+    environment.metal3.io: baremetal
+type: Opaque 
+data:
+  password: YWRtaW4xMjM=
+  username: YWRtaW4=
+
+---
+apiVersion: v1
+kind: Secret
+metadata:
+  name: bmc-ztp-jinkit-kvm-02
+  namespace: jinkit-kvm
+  labels:
+    environment.metal3.io: baremetal
+type: Opaque 
+data:
+  password: YWRtaW4xMjM=
+  username: YWRtaW4=

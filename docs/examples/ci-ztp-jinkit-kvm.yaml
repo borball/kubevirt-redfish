@@ -1,0 +1,186 @@
+---
+apiVersion: siteconfig.open-cluster-management.io/v1alpha1
+kind: ClusterInstance
+metadata:
+  name: jinkit-kvm
+  namespace: jinkit-kvm
+spec:
+  cpuPartitioningMode: None
+  clusterName: jinkit-kvm
+  clusterImageSetNameRef: prerelease-bgp-4.20
+  machineNetwork:
+    - cidr: <changeme-netcidr>
+  networkType: OVNKubernetes
+  ingressVIPs:
+    - <changeme-ingressip>
+  sshPublicKey: <changeme-sshkey>
+  extraLabels:
+    ManagedCluster:
+      vendor: OpenShift
+      name: jinkit-kvm
+      cloud: BareMetal
+  apiVIPs:
+    - <changeme-apiip>
+  nodes:
+    - nodeLabels:
+        demo: kubevirt-redfish
+      automatedCleaningMode: metadata
+      nodeNetwork:
+        config:
+          dns-resolver:
+            config:
+              search:
+                - <changeme-domainname>
+              server:
+                - <changeme-dnssvr>
+          interfaces:
+            - ipv4:
+                address:
+                  - ip: <changeme-node0ip>
+                    prefix-length: <changeme-nodeipprefix>
+                enabled: true
+              ipv6:
+                autoconf: false
+                dhcp: false
+                enabled: false
+              mtu: 1500
+              name: enp1s0
+              state: up
+              type: ethernet
+          routes:
+            config:
+              - destination: 0.0.0.0/0
+                next-hop-address: <changeme-gateway>
+                next-hop-interface: enp1s0
+                table-id: 254
+        interfaces:
+          - macAddress: '00:50:56:03:17:00'
+            name: enp1s0
+      bmcCredentialsName:
+        name: bmc-ztp-jinkit-kvm-00
+      ironicInspect: ''
+      hostName: ztp-jinkit-kvm-00
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bootMode: UEFISecureBoot
+      role: master
+      bootMACAddress: '00:50:56:03:17:00'
+      templateRefs:
+        - name: ai-node-templates-v1
+          namespace: open-cluster-management
+      cpuArchitecture: x86_64
+      bmcAddress: 'redfish-virtualmedia+https://kubevirt-redfish-jinkit-kvm.apps.<changeme-clustername>.<changeme-domainname>/redfish/v1/Systems/ztp-jinkit-kvm-00'
+    - nodeLabels:
+        demo: kubevirt-redfish
+      automatedCleaningMode: metadata
+      nodeNetwork:
+        config:
+          dns-resolver:
+            config:
+              search:
+                - <changeme-domainname>
+              server:
+                - <changeme-dnssvr>
+          interfaces:
+            - ipv4:
+                address:
+                  - ip: <changeme-node1ip>
+                    prefix-length: <changeme-nodeipprefix>
+                enabled: true
+              ipv6:
+                autoconf: false
+                dhcp: false
+                enabled: false
+              mtu: 1500
+              name: enp1s0
+              state: up
+              type: ethernet
+          routes:
+            config:
+              - destination: 0.0.0.0/0
+                next-hop-address: <changeme-gateway>
+                next-hop-interface: enp1s0
+                table-id: 254
+        interfaces:
+          - macAddress: '00:50:56:03:17:01'
+            name: enp1s0
+      bmcCredentialsName:
+        name: bmc-ztp-jinkit-kvm-01
+      ironicInspect: ''
+      hostName: ztp-jinkit-kvm-01
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bootMode: UEFISecureBoot
+      role: master
+      bootMACAddress: '00:50:56:03:17:01'
+      templateRefs:
+        - name: ai-node-templates-v1
+          namespace: open-cluster-management
+      cpuArchitecture: x86_64
+      bmcAddress: 'redfish-virtualmedia+https://kubevirt-redfish-jinkit-kvm.apps.<changeme-clustername>.<changeme-domainname>/redfish/v1/Systems/ztp-jinkit-kvm-01'
+    - nodeLabels:
+        demo: kubevirt-redfish
+      automatedCleaningMode: metadata
+      nodeNetwork:
+        config:
+          dns-resolver:
+            config:
+              search:
+                - <changeme-domainname>
+              server:
+                - <changeme-dnssvr>
+          interfaces:
+            - ipv4:
+                address:
+                  - ip: <changeme-node2ip>
+                    prefix-length: <changeme-nodeipprefix>
+                enabled: true
+              ipv6:
+                autoconf: false
+                dhcp: false
+                enabled: false
+              mtu: 1500
+              name: enp1s0
+              state: up
+              type: ethernet
+          routes:
+            config:
+              - destination: 0.0.0.0/0
+                next-hop-address: <changeme-gateway>
+                next-hop-interface: enp1s0
+                table-id: 254
+        interfaces:
+          - macAddress: '00:50:56:03:17:02'
+            name: enp1s0
+      bmcCredentialsName:
+        name: bmc-ztp-jinkit-kvm-02
+      ironicInspect: ''
+      hostName: ztp-jinkit-kvm-02
+      rootDeviceHints:
+        deviceName: /dev/vda
+      bootMode: UEFISecureBoot
+      role: master
+      bootMACAddress: '00:50:56:03:17:02'
+      templateRefs:
+        - name: ai-node-templates-v1
+          namespace: open-cluster-management
+      cpuArchitecture: x86_64
+      bmcAddress: 'redfish-virtualmedia+https://kubevirt-redfish-jinkit-kvm.apps.<changeme-clustername>.<changeme-domainname>/redfish/v1/Systems/ztp-jinkit-kvm-02'
+  clusterNetwork:
+    - cidr: 10.128.0.0/14
+      hostPrefix: 23
+  additionalNTPSources:
+    - 0.pool.ntp.org
+    - 1.pool.ntp.org
+    - 2.pool.ntp.org
+    - 3.pool.ntp.org
+  baseDomain: <changeme-domainname>
+  holdInstallation: false
+  serviceNetwork:
+    - cidr: 172.30.0.0/16
+  templateRefs:
+    - name: ai-cluster-templates-v1
+      namespace: open-cluster-management
+  cpuArchitecture: x86_64
+  pullSecretRef:
+    name: pullsecret-jinkit-kvm
