@@ -58,7 +58,9 @@ KubeVirt Redfish bridges the gap between traditional virtualization management t
 
 ## Installation QuickStart (via Helm)
 
-The `kubevirt-redfish` project uses [Quay.io](https://quay.io/) to store both the [container](https://quay.io/repository/bjozsa-redhat/kubevirt-redfish?tab=tags) and [Helm](https://quay.io/repository/bjozsa-redhat/charts/kubevirt-redfish?tab=tags) chart artifacts. To install `kubevirt-redfish`, please review the instructions below.
+The `kubevirt-redfish` project uses [Quay.io](https://quay.io/) to store both the [container](https://quay.io/repository/bjozsa-redhat/kubevirt-redfish?tab=tags) and [Helm](https://quay.io/repository/bjozsa-redhat/charts/kubevirt-redfish?tab=tags) chart artifacts. Previous instructions were to written to support a direct OCI installation (i.e. `helm pull oci://quay.io/bjozsa-redhat/charts/kubevirt-redfish --version 0.2.1`), however I would suggest you follow the instructions below to install `kubevirt-redfish`. Reserve any direct OCI chart testing for development purposes only. There is also an [operator](https://github.com/v1k0d3n/kubevirt-redfish-operator) that can be leveraged as well, but please wait until release v0.3.0 for these projects to work seamlessly. For now, follow the instructions below for the most recent installation proceedures.
+
+(*Updated: 25/08/25 at 11:35UTC)
 
 1. Add the Helm repository for the most recent Chart for this project (`kubevirt-redfish`).
 
