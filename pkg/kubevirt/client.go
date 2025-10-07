@@ -21,7 +21,9 @@ package kubevirt
 
 import (
 	"context"
+	"crypto/sha256"
 	"crypto/tls"
+	"encoding/hex"
 	"encoding/pem"
 	"fmt"
 	"io"
@@ -1740,8 +1742,8 @@ func (c *Client) insertVirtualMediaAsync(namespace, name, mediaID, imageURL stri
 		logger.Debug("DEBUG: Using CDI HTTP import approach for URL scheme %s", u.Scheme)
 		// CDI HTTP import for HTTP or valid HTTPS
 		logger.Info("Using CDI HTTP import for ISO")
-		volumeImportSourceName := fmt.Sprintf("%s-populator", dataVolumeName)
-		logger.Debug("DEBUG: Generated volumeImportSourceName=%s", volumeImportSourceName)
+		volumeImportSourceName := c.ensureNameLength(fmt.Sprintf("%s-populator", dataVolumeName), 63)
+		logger.Debug("DEBUG: Generated volumeImportSourceName=%s (length: %d)", volumeImportSourceName, len(volumeImportSourceName))
 		volumeImportSource := &unstructured.Unstructured{
 			Object: map[string]interface{}{
 				"apiVersion": "cdi.kubevirt.io/v1beta1",
@@ -1924,8 +1926,8 @@ func (c *Client) copyISOToPVC(namespace, dataVolumeName, imageURL, isoDownloadTi
 	// Create a simple helper pod that will copy the file to block device
 	// Use timestamp to make pod name unique and avoid race conditions
 	timestamp := time.Now().Unix()
-	helperPodName := fmt.Sprintf("copy-iso-%s-%d", dataVolumeName, timestamp)
-	logger.Debug("DEBUG: Generated unique helper pod name=%s", helperPodName)
+	helperPodName := c.ensureNameLength(fmt.Sprintf("copy-iso-%s-%d", dataVolumeName, timestamp), 63)
+	logger.Debug("DEBUG: Generated unique helper pod name=%s (length: %d)", helperPodName, len(helperPodName))
 
 	// Check if helper pod already exists before creating
 	existingPod, err := c.kubernetesClient.CoreV1().Pods(namespace).Get(context.Background(), helperPodName, metav1.GetOptions{})
@@ -2505,7 +2507,7 @@ func (c *Client) EjectVirtualMedia(namespace, name, mediaID string) error {
 
 	// Clean up associated PVC and VolumeImportSource
 	pvcName := fmt.Sprintf("%s-bootiso", name)
-	volumeImportSourceName := fmt.Sprintf("%s-populator", pvcName)
+	volumeImportSourceName := c.ensureNameLength(fmt.Sprintf("%s-populator", pvcName), 63)
 
 	// Log PVC state before deletion
 	pvc, err := c.kubernetesClient.CoreV1().PersistentVolumeClaims(namespace).Get(ctx, pvcName, metav1.GetOptions{})
@@ -2830,11 +2832,43 @@ func (c *Client) cleanupExistingDataVolume(namespace, dataVolumeName string) err
 
 // generateUniquePVCName generates a unique PVC name with timestamp and random suffix
 // to avoid conflicts when multiple operations target the same VM
+// Ensures the name will work with suffixes like "-populator" (max 63 chars total)
 func (c *Client) generateUniquePVCName(vmName string) string {
 	timestamp := time.Now().Unix()
 	// Generate a random 6-character suffix to further reduce collision probability
 	randomSuffix := fmt.Sprintf("%06d", rand.Intn(1000000))
-	return fmt.Sprintf("%s-bootiso-%d-%s", vmName, timestamp, randomSuffix)
+	baseName := fmt.Sprintf("%s-bootiso-%d-%s", vmName, timestamp, randomSuffix)
+
+	// Reserve space for potential suffixes like "-populator" (11 chars)
+	// This ensures the final name won't exceed 63 characters
+	maxBaseLength := 63 - 11 // Reserve 11 chars for "-populator"
+	return c.ensureNameLength(baseName, maxBaseLength)
+}
+
+// ensureNameLength ensures that a Kubernetes resource name doesn't exceed the maximum length
+// If the name is too long, it truncates it and adds a hash suffix to maintain uniqueness
+func (c *Client) ensureNameLength(name string, maxLength int) string {
+	if len(name) <= maxLength {
+		return name
+	}
+
+	// Calculate how much space we need for the hash suffix
+	// We'll use 8 characters from the SHA256 hash
+	hashLength := 8
+	maxBaseLength := maxLength - hashLength - 1 // -1 for the dash separator
+
+	if maxBaseLength <= 0 {
+		// If maxLength is too small, just use the hash
+		hash := sha256.Sum256([]byte(name))
+		return hex.EncodeToString(hash[:])[:maxLength]
+	}
+
+	// Truncate the name and add hash suffix
+	truncatedName := name[:maxBaseLength]
+	hash := sha256.Sum256([]byte(name))
+	hashSuffix := hex.EncodeToString(hash[:])[:hashLength]
+
+	return fmt.Sprintf("%s-%s", truncatedName, hashSuffix)
 }
 
 // isPVCUsable checks if a PVC is in a usable state for mounting
